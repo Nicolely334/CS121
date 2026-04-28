@@ -1,3 +1,9 @@
+import multiprocessing
+
+try:
+    multiprocessing.set_start_method("fork")
+except RuntimeError:
+    pass
 from configparser import ConfigParser
 from argparse import ArgumentParser
 
