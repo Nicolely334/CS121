@@ -1,9 +1,12 @@
 import re
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urldefrag, urljoin
+from bs4 import BeautifulSoup
 
 def scraper(url, resp):
     links = extract_next_links(url, resp)
     return [link for link in links if is_valid(link)]
+    #in this function keep track of unique pages, longest page, word freq, subdomains, page count, etc.
+
 
 def extract_next_links(url, resp):
     # Implementation required.
@@ -15,7 +18,34 @@ def extract_next_links(url, resp):
     #         resp.raw_response.url: the url, again
     #         resp.raw_response.content: the content of the page!
     # Return a list with the hyperlinks (as strings) scrapped from resp.raw_response.content
-    return list()
+    output = []
+
+    #ok code:
+    #1. check if valid aka status 200
+    if resp.status != 200 or not resp.raw_response:
+        # return resp.error
+        return []
+    else:
+        #now if valid:
+        #2. parse html 
+        parsed = BeautifulSoup(resp.raw_response.content, "lxml")
+        for link in parsed.find_all("a"):
+            find = link.get("href")
+            
+            if find:
+                #first combine
+                combined = urljoin(url, find)
+
+                if '#' not in combined:
+                    output.append(combined)
+
+                else:
+                    formatted, _ = urldefrag(combined)
+                    output.append(formatted)
+
+                return output
+            
+    return [] #fallback!
 
 def is_valid(url):
     # Decide whether to crawl this url or not. 
