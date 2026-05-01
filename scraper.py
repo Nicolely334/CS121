@@ -43,7 +43,7 @@ def extract_next_links(url, resp):
                     formatted, _ = urldefrag(combined)
                     output.append(formatted)
 
-                return output
+        return output #changed. put it outside of the for loop. 
             
     return [] #fallback!
 
@@ -56,17 +56,17 @@ def is_valid(url):
         if parsed.scheme not in set(["http", "https"]):
             return False
         
-              
-        allowedDomains = [".ics.uci.edu", ".cs.uci.edu", ".informatics.uci.edu", ".stat.uci.edu"]
+        #removed leading '.'
+        allowedDomains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"] 
 
         isValid = False
         curHost = parsed.hostname
 
         #first check for valid domains
         for x in allowedDomains:
-            if (x==curHost or curHost.endswith("."+x)):
-                isValid = True
-                break
+                if curHost.endswith("." + x): #changed
+                    isValid = True
+                    break
         
         #if not return False
         if not isValid:
