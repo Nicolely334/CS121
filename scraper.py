@@ -25,6 +25,11 @@ def extract_next_links(url, resp):
     if resp.status != 200 or not resp.raw_response:
         # return resp.error
         return []
+    # also check if the files are very large
+    if len(resp.raw_response.content) > 10000000:  # 10MB
+        return []
+
+
     else:
         #now if valid:
         #2. parse html 
@@ -72,6 +77,13 @@ def is_valid(url):
         if not isValid:
             return False
 
+        # Avoid doku.php trap. adding a trap filter that blocks all the doku.php URLs with query parameters that are generating the infinite combinations.
+        if "doku.php" in parsed.path and parsed.query:
+            return False
+
+        # Avoid social media share links
+        if parsed.query and any(param in parsed.query for param in ["share=", "entry_point=login"]):
+            return False
 
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
