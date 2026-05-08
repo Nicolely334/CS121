@@ -1,5 +1,6 @@
 import re
 import json
+import hashlib
 from collections import Counter, defaultdict
 from urllib.parse import urlparse, urldefrag, urljoin
 from bs4 import BeautifulSoup
@@ -10,6 +11,8 @@ subdomain_pages = defaultdict(set)
 
 longest_page_url = ""
 longest_page_word_count = 0
+duplicate_hashes = set()
+visited_patterns = defaultdict(int)
 
 STOP_WORDS = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
@@ -27,15 +30,20 @@ STOP_WORDS = {
     "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself",
     "yourselves"
 }
-
 def scraper(url, resp):
     global longest_page_url, longest_page_word_count
 
     links = extract_next_links(url, resp)
 
+    clean_url, _ = urldefrag(url)
+
     if resp.status == 200 and resp.raw_response and is_valid(clean_url):
         try:
-            clean_url, _ = urldefrag(url)
+            # Avoid counting/crawling duplicate pages with identical content
+            content_hash = hashlib.md5(resp.raw_response.content).hexdigest()
+            if content_hash in duplicate_hashes:
+                return []
+            duplicate_hashes.add(content_hash)
 
             if clean_url not in visited_urls:
                 visited_urls.add(clean_url)
@@ -157,6 +165,13 @@ def is_valid(url):
         path = parsed.path.lower()
         query = parsed.query.lower()
 
+        #detect if there are any repeated URL path patterns -> crawler traps
+        path_pattern = re.sub(r'\d+', 'N', path)
+        visited_patterns[path_pattern] += 1
+
+        if visited_patterns[path_pattern] > 50:
+            return False
+
         #first check for valid domains
         for x in allowedDomains:
             if curHost == x or curHost.endswith("." + x): #changed
@@ -226,12 +241,14 @@ def is_valid(url):
 
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
-            + r"|png|tiff?|mid|mp2|mp3|mp4"
+            + r"|png|svg|webp|tiff?|mid|mp2|mp3|mp4|m4a"
             + r"|wav|avi|mov|mpeg|mpg|webm|flv|ram|m4v|mkv|ogg|ogv|pdf"
-            + r"|ps|eps|tex|ppt|pptx|doc|docx|xls|xlsx|names"
+            + r"|ps|eps|tex|ppt|pptx|pps|ppsx|pot|potx"
+            + r"|doc|docx|xls|xlsx|names"
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
+            + r"|txt|xml|bib|java|py|apk|war|img"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", path)
 
     except (TypeError, ValueError):
