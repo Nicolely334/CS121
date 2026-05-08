@@ -30,6 +30,7 @@ STOP_WORDS = {
     "who", "whom", "why", "with", "would", "you", "your", "yours", "yourself",
     "yourselves"
 }
+
 def scraper(url, resp):
     global longest_page_url, longest_page_word_count
 
@@ -39,13 +40,14 @@ def scraper(url, resp):
 
     if resp.status == 200 and resp.raw_response and is_valid(clean_url):
         try:
-            # Avoid counting/crawling duplicate pages with identical content
+            # Avoid counting duplicate pages with identical content
             content_hash = hashlib.md5(resp.raw_response.content).hexdigest()
-            if content_hash in duplicate_hashes:
-                return []
-            duplicate_hashes.add(content_hash)
+            is_duplicate_content = content_hash in duplicate_hashes
 
-            if clean_url not in visited_urls:
+            if not is_duplicate_content:
+                duplicate_hashes.add(content_hash)
+
+            if clean_url not in visited_urls and not is_duplicate_content:
                 visited_urls.add(clean_url)
 
                 parsed_url = urlparse(clean_url)
@@ -133,12 +135,8 @@ def extract_next_links(url, resp):
                 #first combine
                 combined = urljoin(url, find)
 
-                if '#' not in combined:
-                    output.append(combined)
-
-                else:
-                    formatted, _ = urldefrag(combined)
-                    output.append(formatted)
+                formatted, _ = urldefrag(combined)
+                output.append(formatted)
 
         return output #changed. put it outside of the for loop. 
             
@@ -166,11 +164,11 @@ def is_valid(url):
         query = parsed.query.lower()
 
         #detect if there are any repeated URL path patterns -> crawler traps
-        path_pattern = re.sub(r'\d+', 'N', path)
-        visited_patterns[path_pattern] += 1
+        # path_pattern = re.sub(r'\d+', 'N', path)
+        # visited_patterns[path_pattern] += 1
 
-        if visited_patterns[path_pattern] > 50:
-            return False
+        # if visited_patterns[path_pattern] > 50:
+        #     return False
 
         #first check for valid domains
         for x in allowedDomains:
@@ -248,7 +246,7 @@ def is_valid(url):
             + r"|data|dat|exe|bz2|tar|msi|bin|7z|psd|dmg|iso"
             + r"|epub|dll|cnf|tgz|sha1"
             + r"|thmx|mso|arff|rtf|jar|csv"
-            + r"|txt|xml|bib|java|py|apk|war|img"
+            + r"|txt|xml|bib|java|py|apk|war|img|nb|json|wasm|ipynb|mat|rdata|rds"
             + r"|rm|smil|wmv|swf|wma|zip|rar|gz)$", path)
 
     except (TypeError, ValueError):
