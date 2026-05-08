@@ -26,7 +26,6 @@ wheels/
 MANIFEST
 
 # Crawler generated output
-analytics.json
 frontier.shelve
 frontier.shelve*
 *.dat
