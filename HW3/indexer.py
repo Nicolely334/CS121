@@ -1,34 +1,3 @@
-"""
-ICS Search Engine — Indexer
-============================
-Builds a disk-based inverted index from the developer dataset (developer.zip / DEV/).
-
-Design Overview
----------------
-1. Traverse corpus JSON files, parse HTML with the built-in HTMLParser.
-2. Tokenize all alphanumeric sequences; stem with Porter stemmer (no stop-word removal).
-3. Give extra TF weight to terms found in <title>, <h1-h3>, <b>, <strong>.
-4. Accumulate postings in memory; flush a partial index to disk every FLUSH_THRESHOLD docs.
-5. Merge all partial indexes (k-way heap merge) into a single sorted postings file.
-6. Write a lexicon (term → offset, length, df) so the searcher does random-access reads.
-7. Write doc metadata (doc_id → url, doc_length) and corpus stats.
-
-Output files (all inside <index_dir>/)
----------------------------------------
-  index.bin       — binary postings (sorted by term, then doc_id)
-  lexicon.json    — {term: [byte_offset, byte_length, df]}
-  doc_meta.json   — {doc_id: {url, length}}
-  stats.json      — {num_docs, num_terms, num_tokens}
-  partials/       — temporary partial index files (deleted after merge)
-
-Usage
------
-  python3 indexer.py ./DEV ./index
-
-  # Optional flags
-  python3 indexer.py ./DEV ./index --flush-threshold 10000
-"""
-
 from __future__ import annotations
 
 import argparse
