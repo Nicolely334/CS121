@@ -5,15 +5,17 @@ from collections import Counter, defaultdict
 from urllib.parse import urlparse, urldefrag, urljoin
 from bs4 import BeautifulSoup
 
-visited_urls = set()
-word_counter = Counter()
-subdomain_pages = defaultdict(set)
+visited_urls = set() #set of all unique URLS alr processed (think of this as final result)
+word_counter = Counter() #dictioanry of every word seen (not including stop words)
+subdomain_pages = defaultdict(set) #dict of set; { key = subdomoin, val = set of unique urls}
 
-longest_page_url = ""
-longest_page_word_count = 0
-duplicate_hashes = set()
-visited_patterns = defaultdict(int)
+longest_page_url = "" #url of page w most words so far
+longest_page_word_count = 0 #word count of the longest page
+duplicate_hashes = set() #use to skip duplicate pages 
+visited_patterns = defaultdict(int) #unused!!! --> og to detect trap patterns 
 
+
+#words excluded from freq count (hw2 req?)
 STOP_WORDS = {
     "a", "about", "above", "after", "again", "against", "all", "am", "an", "and",
     "any", "are", "as", "at", "be", "because", "been", "before", "being", "below",
@@ -31,60 +33,79 @@ STOP_WORDS = {
     "yourselves"
 }
 
+
+#this function basically the entry point for crawler for every page
+
+#1. gets outgoing links from page (from the frontier)
+#2. if page is valid: track unique url, count word freq (except stop words), track longest page, record subdomain of page
+#3. returns valid list of URLs for the crawler to visit next 
+# note remember crawler == queue!
+
 def scraper(url, resp):
     global longest_page_url, longest_page_word_count
 
-    links = extract_next_links(url, resp)
+    links = extract_next_links(url, resp) #gets all hyperlinks from html 
 
-    clean_url, _ = urldefrag(url)
+    clean_url, _ = urldefrag(url) # # Remove the fragment (#section) from the current URL so duplicates like are treated as the same page
 
+
+    #basically if valid: // status 200 means loaded successfully:
     if resp.status == 200 and resp.raw_response and is_valid(clean_url):
         try:
             # Avoid counting duplicate pages with identical content
-            content_hash = hashlib.md5(resp.raw_response.content).hexdigest()
-            is_duplicate_content = content_hash in duplicate_hashes
+            content_hash = hashlib.md5(resp.raw_response.content).hexdigest() #hash raw content
+            is_duplicate_content = content_hash in duplicate_hashes #if not duplicate
 
             if not is_duplicate_content:
                 duplicate_hashes.add(content_hash)
 
+            #onyl record if new and unique:
             if clean_url not in visited_urls and not is_duplicate_content:
-                visited_urls.add(clean_url)
+                visited_urls.add(clean_url)  #mark visited
 
-                parsed_url = urlparse(clean_url)
+
+                #from here subdomain tracking#
+
+                parsed_url = urlparse(clean_url) #basically get hostname and record it. 
                 hostname = parsed_url.hostname
 
                 if hostname:
                     subdomain_pages[hostname].add(clean_url)
 
-                soup = BeautifulSoup(resp.raw_response.content, "lxml")
+
+                soup = BeautifulSoup(resp.raw_response.content, "lxml") #parse html, remove non text elements (styles/script), returns visible text
 
                 for tag in soup(["script", "style", "noscript"]):
-                    tag.decompose()
+                    tag.decompose() #remove this ^^ (basically filtering out)
 
-                text = soup.get_text(separator=" ")
-                words = re.findall(r"[a-zA-Z]+(?:'[a-zA-Z]+)?", text.lower())
+                text = soup.get_text(separator=" ") #get all visible text into 1 string
+                words = re.findall(r"[a-zA-Z]+(?:'[a-zA-Z]+)?", text.lower()) #so u can toeknzie ;; find all alphaetic words
 
+
+                # Filtering out stop words and single-character "words" before count
                 filtered_words = [
                     word for word in words
                     if word not in STOP_WORDS and len(word) > 1
                 ]
 
-                word_counter.update(filtered_words)
+                word_counter.update(filtered_words) #then count 
 
-                word_count = len(words)
+                word_count = len(words) #word total count
 
+                #if larger than current; update. 
                 if word_count > longest_page_word_count:
                     longest_page_word_count = word_count
                     longest_page_url = clean_url
 
-                save_analytics()
+                save_analytics() #write current analytics to disk after every page so we don't data if crawler crashes
 
         except Exception as e:
             print("Analytics error:", e)
 
-    return [link for link in links if is_valid(link)]
+    return [link for link in links if is_valid(link)] #returningi valid links 
 
 def save_analytics():
+    #basically print function. 
     analytics = {
         "unique_pages": len(visited_urls),
         "longest_page": {
@@ -120,7 +141,7 @@ def extract_next_links(url, resp):
         # return resp.error
         return []
     # also check if the files are very large
-    if len(resp.raw_response.content) > 10000000:  # 10MB
+    if len(resp.raw_response.content) > 10000000:  # 10MB thats the treshold
         return []
 
 
@@ -128,19 +149,21 @@ def extract_next_links(url, resp):
         #now if valid:
         #2. parse html 
         parsed = BeautifulSoup(resp.raw_response.content, "lxml")
-        for link in parsed.find_all("a"):
-            find = link.get("href")
+        for link in parsed.find_all("a"): #find all with <a> tag 
+            find = link.get("href") #get href 
             
             if find:
                 #first combine
-                combined = urljoin(url, find)
+                combined = urljoin(url, find) #combines a base URL with a link you found on that page and turns it into a full absolute URL.
 
-                formatted, _ = urldefrag(combined)
+                formatted, _ = urldefrag(combined) #strips fragment; dont want it to crawl same page twice. 
                 output.append(formatted)
 
         return output #changed. put it outside of the for loop. 
             
     return [] #fallback!
+
+
 def is_valid(url):
     # Decide whether to crawl this url or not. 
     # If you decide to crawl it, return True; otherwise return False.
@@ -151,7 +174,7 @@ def is_valid(url):
             return False
         
         #removed leading '.'
-        allowedDomains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"] 
+        allowedDomains = ["ics.uci.edu", "cs.uci.edu", "informatics.uci.edu", "stat.uci.edu"]  #4 domains ur allowed to crawl
 
         isValid = False
         curHost = parsed.hostname
@@ -159,7 +182,7 @@ def is_valid(url):
         if not curHost:
             return False
 
-        curHost = curHost.lower()
+        curHost = curHost.lower() #normalize to lower case all: ;; why?: might be case sensitive. 
         path = parsed.path.lower()
         query = parsed.query.lower()
 
@@ -180,6 +203,7 @@ def is_valid(url):
         if not isValid:
             return False
 
+        #known bad hosts:
         bad_hosts = {
             "gitlab.ics.uci.edu",
             "grape.ics.uci.edu",
@@ -203,6 +227,7 @@ def is_valid(url):
         if curHost == "www.ics.uci.edu" and path.startswith("/~eppstein/pix"):
             return False
 
+        #general pad keywords 
         bad_path_terms = [
             "/calendar",
             "/login",
@@ -237,6 +262,7 @@ def is_valid(url):
         if query and any(param in query for param in bad_query_terms):
             return False
 
+        #final check ; reject urls ending in non html file extensions.
         return not re.match(
             r".*\.(css|js|bmp|gif|jpe?g|ico"
             + r"|png|svg|webp|tiff?|mid|mp2|mp3|mp4|m4a"
