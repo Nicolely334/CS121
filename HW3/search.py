@@ -1,4 +1,12 @@
+import json
+import math
+import argparse
+import struct
+from pathlib import Path
 from indexer import PorterStemmer, POSTING_SIZE
+
+TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
+POSTING_STRUCT = struct.Struct("!If")
 
 def start(index):
     #just load lexicon and doc meta into mem
