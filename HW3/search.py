@@ -56,7 +56,7 @@ def getPostings(term, lexicon, binFile):
 
     return output
 
-def merge(listings):
+def merge(posting_lists):
     #merge posting lists
 
     # nothing to merge
@@ -166,7 +166,7 @@ def search(query, docMeta, lexicon, binFile, stemmer):
         return
 
     #5. score
-    ranked = score(remaining, finalStem, lexicon, docMeta)
+    ranked = score(lexicon, remaining, finalStem, docMeta)
 
     #6. print! yay
     topRes = min(5, len(ranked))
