@@ -120,10 +120,10 @@ def score(lexicon, remaining, stems, docMeta):
             score += (tf * idf)
 
             #normalize:
-            score = score/math.sqrt(docLen)
+        score = score/math.sqrt(docLen)
 
             #tehn append:
-            output.append((score, docID))
+        output.append((score, docID))
 
     output.sort(reverse=True)
     return output
