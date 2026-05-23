@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import argparse
 import struct
 from pathlib import Path
@@ -106,7 +107,9 @@ def score(lexicon, remaining, stems, docMeta):
     #u want to score each doc (normalised) and return a sorted list
     output = []
 
-    for docID, freq in remaining:
+    for docID, freq in remaining.items():
+        if docID not in docMeta:
+            continue
         if "length" in docMeta[docID]:
             docLen = docMeta[docID]["length"]
 
@@ -117,7 +120,7 @@ def score(lexicon, remaining, stems, docMeta):
             docLen = 1
 
 
-        score = 0
+        doc_score = 0
 
         for i in range(len(stems)):
             term = stems[i]
@@ -125,13 +128,13 @@ def score(lexicon, remaining, stems, docMeta):
             tf = freq[i]
             idf = lexicon[term][3] #bc at index 3 in lexicon entry
 
-            score += (tf * idf)
+            doc_score += (tf * idf)
 
             #normalize:
-        score = score/math.sqrt(docLen)
+        doc_score = doc_score/math.sqrt(docLen)
 
             #tehn append:
-        output.append((score, docID))
+        output.append((doc_score, docID))
 
     output.sort(reverse=True)
     return output
