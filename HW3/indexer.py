@@ -489,6 +489,83 @@ def build_index(
     )
 
 
+def load_lexicon(index_dir: Path) -> Dict[str, Tuple[int, int, int, float]]:
+    lexicon_path = index_dir / "lexicon.json"
+    if not lexicon_path.exists():
+        raise FileNotFoundError(f"Missing lexicon file: {lexicon_path}")
+    raw = json.loads(lexicon_path.read_text(encoding="utf-8"))
+    return {
+        term: (offset, length, df, float(idf))
+        for term, (offset, length, df, idf) in raw.items()
+    }
+
+
+def load_doc_meta(index_dir: Path) -> Dict[int, Dict[str, int]]:
+    doc_meta_path = index_dir / "doc_meta.json"
+    if not doc_meta_path.exists():
+        raise FileNotFoundError(f"Missing document metadata file: {doc_meta_path}")
+    raw = json.loads(doc_meta_path.read_text(encoding="utf-8"))
+    return {int(doc_id): meta for doc_id, meta in raw.items()}
+
+
+def read_postings(index_bin_path: Path, offset: int, length: int) -> List[Tuple[int, int]]:
+    with open(index_bin_path, "rb") as fin:
+        fin.seek(offset)
+        raw = fin.read(length)
+    return decode_postings(raw)
+
+
+def normalize_query(query: str) -> List[str]:
+    stemmer = PorterStemmer()
+    return [stemmer.stem(tok) for tok in TOKEN_RE.findall(query) if tok]
+
+
+def search_index(index_dir: Path, query: str, top_k: int = 20) -> List[Tuple[float, int, str]]:
+    lexicon = load_lexicon(index_dir)
+    doc_meta = load_doc_meta(index_dir)
+    query_terms = normalize_query(query)
+
+    if not query_terms:
+        return []
+
+    index_bin_path = index_dir / "index.bin"
+    term_postings: List[Tuple[str, float, Dict[int, int]]] = []
+
+    for term in query_terms:
+        if term not in lexicon:
+            return []
+        offset, length, _, idf = lexicon[term]
+        postings = dict(read_postings(index_bin_path, offset, length))
+        term_postings.append((term, idf, postings))
+
+    common_doc_ids = set(term_postings[0][2].keys())
+    for _, _, postings in term_postings[1:]:
+        common_doc_ids &= postings.keys()
+        if not common_doc_ids:
+            return []
+
+    results: List[Tuple[float, int, str]] = []
+    for doc_id in sorted(common_doc_ids):
+        score = sum(postings[doc_id] * idf for _, idf, postings in term_postings)
+        url = doc_meta.get(doc_id, {}).get("url", "")
+        results.append((score, doc_id, url))
+
+    results.sort(key=lambda item: (-item[0], item[1]))
+    return results[:top_k]
+
+
+def print_search_results(index_dir: Path, query: str, top_k: int = 20) -> None:
+    results = search_index(index_dir, query, top_k)
+    print(f"Query: {query}")
+    if not results:
+        print("No matching documents found.")
+        return
+
+    print(f"Top {len(results)} results:")
+    for rank, (score, doc_id, url) in enumerate(results, start=1):
+        print(f"{rank}. {url} (doc_id={doc_id}, score={score:.4f})")
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="ICS Search Engine Indexer",
@@ -498,12 +575,13 @@ def main() -> None:
     parser.add_argument(
         "corpus_root",
         type=Path,
+        nargs="?",
         help="Path to the extracted DEV folder (contains one sub-folder per domain).",
     )
     parser.add_argument(
         "index_dir",
         type=Path,
-        help="Directory where index files will be written.",
+        help="Directory where index files will be written or read from.",
     )
     parser.add_argument(
         "--flush-threshold",
@@ -512,9 +590,26 @@ def main() -> None:
         metavar="N",
         help=f"Flush a partial index after every N documents (default: {DEFAULT_FLUSH_THRESHOLD}).",
     )
+    parser.add_argument(
+        "--query",
+        type=str,
+        help="Run a boolean AND search query against an existing index.",
+    )
+    parser.add_argument(
+        "--top-k",
+        type=int,
+        default=20,
+        help="Maximum number of search results to display.",
+    )
     args = parser.parse_args()
 
-    if not args.corpus_root.is_dir():
+    if args.query:
+        if not args.index_dir.is_dir():
+            sys.exit(f"Error: index directory '{args.index_dir}' is not a directory.")
+        print_search_results(args.index_dir, args.query, args.top_k)
+        return
+
+    if not args.corpus_root or not args.corpus_root.is_dir():
         sys.exit(f"Error: corpus root '{args.corpus_root}' is not a directory.")
 
     build_index(
