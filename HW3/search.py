@@ -7,7 +7,7 @@ from pathlib import Path
 from indexer import PorterStemmer, POSTING_SIZE
 
 TOKEN_RE = re.compile(r"[a-zA-Z0-9]+")
-POSTING_STRUCT = struct.Struct("!If")
+POSTING_STRUCT = struct.Struct("<II")
 
 def start(index):
     #just load lexicon and doc meta into mem
@@ -129,9 +129,6 @@ def score(lexicon, remaining, stems, docMeta):
             idf = lexicon[term][3] #bc at index 3 in lexicon entry
 
             doc_score += (tf * idf)
-
-            #normalize:
-        doc_score = doc_score/math.sqrt(docLen)
 
             #tehn append:
         output.append((doc_score, docID))

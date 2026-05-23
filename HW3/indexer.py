@@ -554,7 +554,7 @@ def search_index(index_dir: Path, query: str, top_k: int = 20) -> List[Tuple[flo
     return results[:top_k]
 
 
-def print_search_results(index_dir: Path, query: str, top_k: int = 20) -> None:
+def print_search_results(index_dir: Path, query: str, top_k: int = 5) -> None:
     results = search_index(index_dir, query, top_k)
     print(f"Query: {query}")
     if not results:
