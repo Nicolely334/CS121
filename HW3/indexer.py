@@ -27,6 +27,7 @@ IMPORTANT_WEIGHTS: Dict[str, int] = {
 }
 
 DEFAULT_FLUSH_THRESHOLD = 8_000
+SEARCH_CACHE: Dict[Path, Tuple[Dict[str, Tuple[int, int, int, float]], Dict[int, Dict[str, int]], float]] = {}
 
 
 class PorterStemmer:
@@ -508,6 +509,20 @@ def load_doc_meta(index_dir: Path) -> Dict[int, Dict[str, int]]:
     return {int(doc_id): meta for doc_id, meta in raw.items()}
 
 
+def load_index_context(index_dir: Path) -> Tuple[Dict[str, Tuple[int, int, int, float]], Dict[int, Dict[str, int]], float]:
+    if index_dir in SEARCH_CACHE:
+        return SEARCH_CACHE[index_dir]
+
+    lexicon = load_lexicon(index_dir)
+    doc_meta = load_doc_meta(index_dir)
+    avg_doc_length = (
+        sum(meta.get("length", 0) for meta in doc_meta.values())
+        / max(1, len(doc_meta))
+    )
+    SEARCH_CACHE[index_dir] = (lexicon, doc_meta, avg_doc_length)
+    return SEARCH_CACHE[index_dir]
+
+
 def read_postings(index_bin_path: Path, offset: int, length: int) -> List[Tuple[int, int]]:
     with open(index_bin_path, "rb") as fin:
         fin.seek(offset)
@@ -521,8 +536,7 @@ def normalize_query(query: str) -> List[str]:
 
 
 def search_index(index_dir: Path, query: str, top_k: int = 20) -> List[Tuple[float, int, str]]:
-    lexicon = load_lexicon(index_dir)
-    doc_meta = load_doc_meta(index_dir)
+    lexicon, doc_meta, avg_doc_length = load_index_context(index_dir)
     query_terms = normalize_query(query)
 
     if not query_terms:
@@ -538,6 +552,7 @@ def search_index(index_dir: Path, query: str, top_k: int = 20) -> List[Tuple[flo
         postings = dict(read_postings(index_bin_path, offset, length))
         term_postings.append((term, idf, postings))
 
+    term_postings.sort(key=lambda item: len(item[2]))
     common_doc_ids = set(term_postings[0][2].keys())
     for _, _, postings in term_postings[1:]:
         common_doc_ids &= postings.keys()
@@ -546,9 +561,13 @@ def search_index(index_dir: Path, query: str, top_k: int = 20) -> List[Tuple[flo
 
     results: List[Tuple[float, int, str]] = []
     for doc_id in sorted(common_doc_ids):
-        score = sum(postings[doc_id] * idf for _, idf, postings in term_postings)
-        url = doc_meta.get(doc_id, {}).get("url", "")
-        results.append((score, doc_id, url))
+        doc_len = doc_meta.get(doc_id, {}).get("length", 1)
+        if doc_len <= 0:
+            doc_len = 1
+
+        score_value = sum(postings[doc_id] * idf for _, idf, postings in term_postings)
+        score_value /= math.sqrt(doc_len / max(1.0, avg_doc_length))
+        results.append((score_value, doc_id, doc_meta.get(doc_id, {}).get("url", "")))
 
     results.sort(key=lambda item: (-item[0], item[1]))
     return results[:top_k]

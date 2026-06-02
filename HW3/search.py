@@ -33,14 +33,18 @@ def start(index):
 
     #now load doc id (change from str to ints)!
     data = {}
-    for id,info in meta.items():
+    for id, info in meta.items():
         data[int(id)] = info
 
+    avg_doc_length = (
+        sum(info.get("length", 0) for info in data.values())
+        / max(1, len(data))
+    )
 
     #load binary
     index_binary = open(path, "rb")
 
-    return lexi, data, index_binary
+    return lexi, data, index_binary, avg_doc_length
 
 def getPostings(term, lexicon, binFile):
     #get postings for 1 term;; want to return a list of doc id, tf
@@ -103,40 +107,30 @@ def merge(posting_lists):
 
     return result
 
-def score(lexicon, remaining, stems, docMeta):
-    #u want to score each doc (normalised) and return a sorted list
+def score(lexicon, remaining, stems, docMeta, avg_doc_length: float = 1.0):
+    # score each doc using length-normalized TF-IDF
     output = []
 
     for docID, freq in remaining.items():
         if docID not in docMeta:
             continue
-        if "length" in docMeta[docID]:
-            docLen = docMeta[docID]["length"]
-
-            if docLen == 0:
-                docLen = 1
-
-        else:
+        docLen = docMeta[docID].get("length", 1)
+        if docLen <= 0:
             docLen = 1
 
-
-        doc_score = 0
-
-        for i in range(len(stems)):
-            term = stems[i]
-
+        doc_score = 0.0
+        for i, term in enumerate(stems):
             tf = freq[i]
-            idf = lexicon[term][3] #bc at index 3 in lexicon entry
+            idf = lexicon[term][3]  # bc at index 3 in lexicon entry
+            doc_score += tf * idf
 
-            doc_score += (tf * idf)
-
-            #tehn append:
-        output.append((doc_score, docID))
+        normalized_doc_length = math.sqrt(docLen / max(1.0, avg_doc_length))
+        output.append((doc_score / normalized_doc_length, docID))
 
     output.sort(reverse=True)
     return output
 
-def search(query, docMeta, lexicon, binFile, stemmer):
+def search(query, docMeta, lexicon, binFile, stemmer, avg_doc_length: float = 1.0):
     #calls all helper funcs and returns top 5
 
     #1. tokenize
@@ -174,7 +168,7 @@ def search(query, docMeta, lexicon, binFile, stemmer):
         return
 
     #5. score
-    ranked = score(lexicon, remaining, finalStem, docMeta)
+    ranked = score(lexicon, remaining, finalStem, docMeta, avg_doc_length)
 
     #6. print! yay
     topRes = min(5, len(ranked))
@@ -202,7 +196,7 @@ def main() -> None:
     args = parser.parse_args()
 
     # load lexicon, doc metadata, and binary index file into memory
-    lexicon, doc_meta, bin_file = start(args.index_dir)
+    lexicon, doc_meta, bin_file, avg_doc_length = start(args.index_dir)
 
     # create stemmer instance
     stemmer = PorterStemmer()
@@ -221,7 +215,7 @@ def main() -> None:
                 # empty input means quit
                 break
             # run the search and print top 5 results
-            search(query, doc_meta, lexicon, bin_file, stemmer)
+            search(query, doc_meta, lexicon, bin_file, stemmer, avg_doc_length)
     finally:
         # always close the binary file even if something crashes
         bin_file.close()
