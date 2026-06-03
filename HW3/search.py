@@ -118,11 +118,18 @@ def score(lexicon, remaining, stems, docMeta, avg_doc_length: float = 1.0):
         if docLen <= 0:
             docLen = 1
 
+        url = docMeta[docID].get("url", "")
+        url_lower = url.lower()
+
         doc_score = 0.0
         for i, term in enumerate(stems):
             tf = freq[i]
-            idf = lexicon[term][3]  # bc at index 3 in lexicon entry
+            # cap tf to reduce effect of term spamming
+            tf = min(tf, 10)
+            idf = lexicon[term][3]
             doc_score += tf * idf
+            if term in url_lower:
+                doc_score += idf * 10
 
         normalized_doc_length = math.sqrt(docLen / max(1.0, avg_doc_length))
         output.append((doc_score / normalized_doc_length, docID))
@@ -143,6 +150,9 @@ def search(query, docMeta, lexicon, binFile, stemmer, avg_doc_length: float = 1.
     #2. stem
     stemm = []
     for x in tokens:
+        # skip pure numbers - they don't help retrieval
+        if x.isdigit():
+            continue
         stem = stemmer.stem(x)
         stemm.append(stem)
 
@@ -173,13 +183,21 @@ def search(query, docMeta, lexicon, binFile, stemmer, avg_doc_length: float = 1.
     #6. print! yay
     topRes = min(5, len(ranked))
 
-    for i in range(topRes):
+    BAD_EXTENSIONS = {".log", ".bib", ".txt", ".ftp", ".dat", ".gitignore"}
+    SLIDE_PATTERN = re.compile(r"slide\d+", re.IGNORECASE)
+
+    printed = 0
+    i = 0
+    while printed < 5 and i < len(ranked):
         scoreValue = ranked[i][0]
         docID = ranked[i][1]
         url = docMeta[docID]["url"]
-
-        print(str(i + 1) + ". " + url)
-        print("score:", round(scoreValue, 4))
+        ext = Path(url).suffix.lower()
+        if ext not in BAD_EXTENSIONS and not SLIDE_PATTERN.search(url):
+            print(str(printed + 1) + ". " + url)
+            print("score:", round(scoreValue, 4))
+            printed += 1
+        i += 1
 
 
 def main() -> None:
